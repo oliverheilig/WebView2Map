@@ -1,0 +1,198 @@
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title></title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id='map'></div>
+    <script type="module">
+        // Import the directions plugin
+        import MapLibreGlDirections, {
+            MapLibreGlDirectionsRoutingEvent,
+        } from "https://unpkg.com/@maplibre/maplibre-gl-directions@0.7.1/dist/maplibre-gl-directions.js"
+
+        window.setWaypoints = async function (waypoints) {
+            if (!window.directions) // directions is not initialized yet, just store the waypoints
+                window.waypoints = JSON.parse(waypoints);
+            else
+                window.directions.setWaypoints(JSON.parse(waypoints));
+        }
+
+        window.initMapAndRouting = function (apiKey, lat, lng, zoom) {
+            window.apiKey = apiKey
+
+            var map = new maplibregl.Map({
+                attributionControl: true,
+                container: "map",
+                zoom: zoom,
+                pitch: 0,
+                center: [lat, lng],
+                antialias: true,
+                hash: true,
+                style: "https://vectormaps-resources.myptv.com/styles/latest/standard.json",
+                transformRequest: (url, resourceType) => {
+                    if (resourceType === "Tile" && url.startsWith("https://api.myptv.com")) {
+                        return {
+                            url: url + (url.split("?")[1] ? "&" : "?") + "apiKey=" + apiKey,
+                        }
+                    }
+                },
+            })
+
+            map.addControl(new maplibregl.NavigationControl())
+
+            map.once("load", () => {
+                // Create an instance of the default class
+                const directions = new MapLibreGlDirections(map)
+                window.directions = directions;
+
+                // Enable interactivity (if needed)
+                directions.interactive = true
+
+                // Use the modified method to fetch the routes from PTV Developer
+                directions.fetchDirections = fetchPtvDeveloperDirections
+
+                // register events on the Host
+                directions.on('fetchroutesend', (e) => {
+                    window.chrome.webview.hostObjects.sync.bridge.onCalculated(e.data.distance, e.data.travelTime);
+                });
+                ["setwaypoints", "rotatewaypoints", "addwaypoint", "removewaypoint", "movewaypoint"].forEach(function (e) {
+                    directions.on(e, (e) => {
+                        window.chrome.webview.hostObjects.sync.bridge.waypointsChanged(directions.waypoints);
+                    })
+                });
+
+                // calculate the route, if waypoints are already set
+                if (window.waypoints)
+                    window.directions.setWaypoints(window.waypoints);
+            })
+        }
+
+        /*
+         * Modified code from
+         * https://github.com/maplibre/maplibre-gl-directions/blob/main/src/directions/main.ts#L129
+         */
+        async function fetchPtvDeveloperDirections(originalEvent) {
+            /*
+             * If a request from a previous fetchDirections is already running (there's no such a check really, but this is
+             * implied be calling this method), we abort it as we don't need the previous value anymore.
+             */
+            this.abortController?.abort()
+
+            if (this._waypoints.length >= 2) {
+                this.fire(
+                    new MapLibreGlDirectionsRoutingEvent("fetchroutesstart", originalEvent),
+                )
+
+                this.abortController = new AbortController()
+
+                let timer
+                if (this.configuration.requestTimeout !== null) {
+                    timer = setTimeout(
+                        () => this.abortController?.abort(),
+                        this.configuration.requestTimeout,
+                    )
+                }
+
+                const wpstr = this._waypoints.reduce(
+                    (a, c) =>
+                        a +
+                        `&waypoints=${c.geometry.coordinates[1]},${c.geometry.coordinates[0]}`,
+                    "",
+                )
+                const url = `https://api.myptv.com/routing/v1/routes?results=LEGS_POLYLINE&options[trafficMode]=AVERAGE${wpstr}&apiKey=${apiKey}`
+
+                let response
+                try {
+                    try {
+                        response = await (
+                            await fetch(url, { signal: this.abortController?.signal })
+                        ).json()
+                    } finally {
+                        this.fire(
+                            new MapLibreGlDirectionsRoutingEvent(
+                                "fetchroutesend",
+                                originalEvent,
+                                response,
+                            ),
+                        )
+                    }
+                } finally {
+                    clearTimeout(timer)
+                }
+
+                // decode the JSON polyline
+                for (var i = 0; i < response.legs.length; i++)
+                    response.legs[i].polydec = JSON.parse(response.legs[i].polyline)
+
+                var snappoints = []
+                for (var i = 0; i < this._waypoints.length; i++)
+                    snappoints.push({
+                        type: "Feature",
+                        geometry: {
+                            type: "Point",
+                            coordinates:
+                                // use the first coord of the corresponding leg
+                                // and the last coord of the last leg (n waypoints, n-1 legs)
+                                i < this._waypoints.length - 1
+                                    ? response.legs[i].polydec.coordinates[0]
+                                    : response.legs[i - 1].polydec.coordinates[
+                                    response.legs[i - 1].polydec.coordinates.length - 1
+                                    ],
+                        },
+                        properties: {
+                            type: "SNAPPOINT",
+                            id: "sp" + i,
+                            waypointProperties: this._waypoints[i].properties ?? {},
+                        },
+                    })
+                this.snappoints = snappoints
+
+                var routelines = []
+                for (var i = 0; i < response.legs.length; i++)
+                    routelines.push([
+                        {
+                            type: "Feature",
+                            geometry: response.legs[i].polydec,
+                            properties: {
+                                id: "rl" + i,
+                                routeIndex: 0,
+                                route: "SELECTED",
+                                legIndex: i,
+                                congestion: 0,
+                                departSnappointProperties: this.snappoints[i].properties,
+                                arriveSnappointProperties: this.snappoints[i + 1].properties
+                            },
+                        },
+                    ])
+                this.routelines = routelines
+            } else {
+                this.snappoints = []
+                this.routelines = []
+            }
+
+            // the selected route index might have changed
+            this.draw(false)
+        }
+
+    </script>
+
+</body>
+</html>
