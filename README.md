@@ -8,4 +8,6 @@ Demonstrates how to:
 
 Get your free API key at https://developer.myptv.com/ and add it in [Form1.cs](https://github.com/oliverheilig/WebView2Map/blob/4d784887ec754094fbc35eaf35647abe2c3d941e/Form1.cs#L16).
 
+**Note:** It seems sometimes the WebView2 runtimes folder isn't copied at the initial build. In this case just clean and rebuild the solution.
+
 ![screenshot](https://raw.githubusercontent.com/oliverheilig/WebView2Map/main/screenshot.png)
