@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace WebView2Map
@@ -21,17 +22,6 @@ namespace WebView2Map
             webViewControl.Source = new Uri($"file:///{Application.StartupPath}/routing.html");
         }
 
-        WayPoint[] wayPoints = new [] {
-            new WayPoint(8.37922, 49.01502),
-            new WayPoint(8.42806, 49.01328),
-        };
-
-        public void onCalculated(int distance, int travelTime)
-        {
-            label1.Text = $"Travel Time: {TimeSpan.FromSeconds(travelTime)}" ;
-            label2.Text = $"Distance: {distance / 1000.0} km";
-        }
-
         private async void webViewControl_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
             // initialize the host bridge
@@ -46,7 +36,16 @@ namespace WebView2Map
                 $"window.initMapAndRouting('{apiKey}',{lat},{lng},{zoom});"));
 
             // Calculate initial route
-            calculateRoute(wayPoints);
+            await setWaypoints(new[] {
+                new WayPoint(8.37922, 49.01502),
+                new WayPoint(8.42806, 49.01328),
+            });
+        }
+
+        public void onCalculated(int distance, int travelTime)
+        {
+            label1.Text = $"Travel Time: {TimeSpan.FromSeconds(travelTime)}";
+            label2.Text = $"Distance: {distance / 1000.0} km";
         }
 
         public void waypointsChanged(dynamic waypoints)
@@ -61,7 +60,7 @@ namespace WebView2Map
             dataGridView1.DataSource = source;
         }
 
-        private async void calculateRoute(IEnumerable<WayPoint> waypoints) 
+        private async Task setWaypoints(IEnumerable<WayPoint> waypoints) 
         { 
             // For complex data Host->Browser just use json
             var coords = waypoints.Select(wp => new[] {wp.Latitude, wp.Longitude});
@@ -69,9 +68,9 @@ namespace WebView2Map
             await webViewControl.CoreWebView2.ExecuteScriptAsync($"setWaypoints({json});");
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private async void button1_Click(object sender, EventArgs e)
         {
-            calculateRoute((dataGridView1.DataSource as BindingSource).DataSource as IEnumerable<WayPoint>);
+            await setWaypoints((dataGridView1.DataSource as BindingSource).DataSource as IEnumerable<WayPoint>);
         }
     }
 
