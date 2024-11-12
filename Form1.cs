@@ -1,10 +1,10 @@
 ﻿using Microsoft.Web.WebView2.Core;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Windows.Forms;
 
 namespace WebView2Map
@@ -65,8 +65,8 @@ namespace WebView2Map
         { 
             // For complex data Host->Browser just use json
             var coords = waypoints.Select(wp => new[] {wp.Latitude, wp.Longitude});
-            string json = JsonSerializer.Serialize(coords);
-            await webViewControl.CoreWebView2.ExecuteScriptAsync($"setWaypoints('{json}');");
+            string json = JsonConvert.SerializeObject(coords);
+            await webViewControl.CoreWebView2.ExecuteScriptAsync($"setWaypoints({json});");
         }
 
         private void button1_Click(object sender, EventArgs e)

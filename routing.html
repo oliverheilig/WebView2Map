@@ -30,9 +30,9 @@
 
         window.setWaypoints = async function (waypoints) {
             if (!window.directions) // directions is not initialized yet, just store the waypoints
-                window.waypoints = JSON.parse(waypoints);
+                window.waypoints = waypoints;
             else
-                window.directions.setWaypoints(JSON.parse(waypoints));
+                window.directions.setWaypoints(waypoints);
         }
 
         window.initMapAndRouting = function (apiKey, lat, lng, zoom) {
