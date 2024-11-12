@@ -6,7 +6,7 @@ Demonstrates how to:
 * Integrate interactive routing using the PTV Developer [Routing Api](https://developer.myptv.com/en/documentation/routing-api) and [maplibre-gl-directions](https://github.com/maplibre/maplibre-gl-directions).
 * Bridge api calls between Winforms and WebView2.
 
-Get your free API key at https://developer.myptv.com/ and add it in [Form1.cs](https://github.com/oliverheilig/WebView2Map/blob/4d784887ec754094fbc35eaf35647abe2c3d941e/Form1.cs#L16).
+Get your free API key at https://developer.myptv.com/ and add it in [Form1.cs](https://github.com/oliverheilig/WebView2Map/blob/7f0a275fad0cec3b7eb353d2060b3286ee3e633d/Form1.cs#L16).
 
 **Note:** It seems sometimes the WebView2 runtimes folder isn't copied at the initial build. In this case just clean and rebuild the solution.
 
