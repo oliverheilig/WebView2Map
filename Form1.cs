@@ -33,7 +33,7 @@ namespace WebView2Map
             double lng = 49.015;
             int zoom = 12;
             await webViewControl.CoreWebView2.ExecuteScriptAsync(FormattableString.Invariant(
-                $"window.initMapAndRouting('{apiKey}',{lat},{lng},{zoom});"));
+                $"initMapAndRouting('{apiKey}',{lat},{lng},{zoom});"));
 
             // Calculate initial route
             await setWaypoints(new[] {

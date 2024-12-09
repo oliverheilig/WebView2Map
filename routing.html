@@ -28,7 +28,7 @@
             MapLibreGlDirectionsRoutingEvent,
         } from "https://unpkg.com/@maplibre/maplibre-gl-directions@0.7.1/dist/maplibre-gl-directions.js"
 
-        window.setWaypoints = async function (waypoints) {
+        window.setWaypoints = function (waypoints) {
             if (!window.directions) // directions is not initialized yet, just store the waypoints
                 window.waypoints = waypoints;
             else
