@@ -3,8 +3,8 @@
     <meta charset='utf-8' />
     <title></title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
-    <script src='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.js'></script>
-    <link href='https://unpkg.com/maplibre-gl@3.1.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.css' rel='stylesheet' />
     <style>
         body {
             margin: 0;
@@ -25,8 +25,10 @@
     <script type="module">
         // Import the directions plugin
         import MapLibreGlDirections, {
-            MapLibreGlDirectionsRoutingEvent,
-        } from "https://unpkg.com/@maplibre/maplibre-gl-directions@0.7.1/dist/maplibre-gl-directions.js"
+            MapLibreGlDirectionsCancelableEvent,
+            MapLibreGlDirectionsNonCancelableEvent,
+            LoadingIndicatorControl,
+        } from "https://unpkg.com/@maplibre/maplibre-gl-directions@0.9.1/dist/maplibre-gl-directions.js"
 
         window.setWaypoints = function (waypoints) {
             if (!window.directions) // directions is not initialized yet, just store the waypoints
@@ -61,6 +63,7 @@
             map.once("load", () => {
                 // Create an instance of the default class
                 const directions = new MapLibreGlDirections(map)
+                map.addControl(new LoadingIndicatorControl(directions), "bottom-left")
                 window.directions = directions;
 
                 // Enable interactivity (if needed)
@@ -98,7 +101,7 @@
 
             if (this._waypoints.length >= 2) {
                 this.fire(
-                    new MapLibreGlDirectionsRoutingEvent("fetchroutesstart", originalEvent),
+                    new MapLibreGlDirectionsCancelableEvent("fetchroutesstart", originalEvent),
                 )
 
                 this.abortController = new AbortController()
@@ -111,12 +114,11 @@
                     )
                 }
 
-                const wpstr = this._waypoints.reduce(
-                    (a, c) =>
-                        a +
-                        `&waypoints=${c.geometry.coordinates[1]},${c.geometry.coordinates[0]}`,
-                    "",
-                )
+                let wpstr = ''
+                for (const wp of this._waypoints) {
+                    wpstr += `&waypoints=${wp.geometry.coordinates[1]},${wp.geometry.coordinates[0]}`
+                }
+
                 const url = `https://api.myptv.com/routing/v1/routes?results=LEGS_POLYLINE&options[trafficMode]=AVERAGE${wpstr}&apiKey=${apiKey}`
 
                 let response
@@ -127,7 +129,7 @@
                         ).json()
                     } finally {
                         this.fire(
-                            new MapLibreGlDirectionsRoutingEvent(
+                            new MapLibreGlDirectionsNonCancelableEvent(
                                 "fetchroutesend",
                                 originalEvent,
                                 response,
@@ -139,11 +141,11 @@
                 }
 
                 // decode the JSON polyline
-                for (var i = 0; i < response.legs.length; i++)
-                    response.legs[i].polydec = JSON.parse(response.legs[i].polyline)
+                for (const leg of response.legs)
+                    leg.polyline = JSON.parse(leg.polyline)
 
-                var snappoints = []
-                for (var i = 0; i < this._waypoints.length; i++)
+                let snappoints = []
+                for (let i = 0; i < this._waypoints.length; i++)
                     snappoints.push({
                         type: "Feature",
                         geometry: {
@@ -152,9 +154,9 @@
                                 // use the first coord of the corresponding leg
                                 // and the last coord of the last leg (n waypoints, n-1 legs)
                                 i < this._waypoints.length - 1
-                                    ? response.legs[i].polydec.coordinates[0]
-                                    : response.legs[i - 1].polydec.coordinates[
-                                    response.legs[i - 1].polydec.coordinates.length - 1
+                                    ? response.legs[i].polyline.coordinates[0]
+                                    : response.legs[i - 1].polyline.coordinates[
+                                    response.legs[i - 1].polyline.coordinates.length - 1
                                     ],
                         },
                         properties: {
@@ -163,25 +165,25 @@
                             waypointProperties: this._waypoints[i].properties ?? {},
                         },
                     })
-                this.snappoints = snappoints
 
-                var routelines = []
-                for (var i = 0; i < response.legs.length; i++)
+                let routelines = []
+                for (let i = 0; i < response.legs.length; i++)
                     routelines.push([
                         {
                             type: "Feature",
-                            geometry: response.legs[i].polydec,
+                            geometry: response.legs[i].polyline,
                             properties: {
                                 id: "rl" + i,
                                 routeIndex: 0,
                                 route: "SELECTED",
                                 legIndex: i,
                                 congestion: 0,
-                                departSnappointProperties: this.snappoints[i].properties,
-                                arriveSnappointProperties: this.snappoints[i + 1].properties
+                                departSnappointProperties: snappoints[i].properties,
+                                arriveSnappointProperties: snappoints[i + 1].properties,
                             },
                         },
                     ])
+                this.snappoints = snappoints
                 this.routelines = routelines
             } else {
                 this.snappoints = []
