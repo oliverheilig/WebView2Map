@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>WebView2Map</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <script src="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@5.20.1/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+    <script type="module">
+        import { LoadingIndicatorControl } from "https://unpkg.com/@maplibre/maplibre-gl-directions@0.9.1/dist/maplibre-gl-directions.js";
+        import PtvDirections from "./ptv-directions.js";
+
+        // The host object registered in MainForm.cs, see MapBridge.cs
+        const bridge = window.chrome.webview.hostObjects.sync.bridge;
+
+        let directions;       // created once the map has loaded
+        let pendingWaypoints; // waypoints the host sent before that
+
+        // Called by the host. Coordinates are [lng, lat], as everywhere in MapLibre and GeoJSON.
+        window.initMapAndRouting = function (apiKey, lng, lat, zoom) {
+            const map = new maplibregl.Map({
+                container: "map",
+                attributionControl: true,
+                center: [lng, lat],
+                zoom: zoom,
+                style: "https://vectormaps-resources.myptv.com/styles/latest/standard.json",
+                transformRequest: (url, resourceType) => {
+                    if (resourceType === "Tile" && url.startsWith("https://api.myptv.com")) {
+                        return {
+                            url: url + (url.split("?")[1] ? "&" : "?") + "apiKey=" + apiKey,
+                        };
+                    }
+                },
+            });
+
+            map.addControl(new maplibregl.NavigationControl());
+
+            map.once("load", () => {
+                directions = new PtvDirections(map, apiKey);
+                directions.interactive = true;
+                map.addControl(new LoadingIndicatorControl(directions), "bottom-left");
+
+                // Report route and waypoint changes to the host
+                directions.on("fetchroutesend", (event) => {
+                    const response = event.data.directions; // undefined if the request failed or was aborted
+                    if (response)
+                        bridge.onCalculated(response.distance, response.travelTime);
+                });
+                for (const eventName of ["setwaypoints", "rotatewaypoints", "addwaypoint", "removewaypoint", "movewaypoint"]) {
+                    directions.on(eventName, () => bridge.waypointsChanged(JSON.stringify(directions.waypoints)));
+                }
+
+                if (pendingWaypoints)
+                    directions.setWaypoints(pendingWaypoints);
+            });
+        };
+
+        // Called by the host with [[lng, lat], ...]
+        window.setWaypoints = function (waypoints) {
+            if (directions)
+                directions.setWaypoints(waypoints);
+            else
+                pendingWaypoints = waypoints; // the map is still loading
+        };
+    </script>
+
+</body>
+</html>
